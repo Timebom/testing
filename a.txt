@@ -1,0 +1,1 @@
+this is a first session for using git and github 
