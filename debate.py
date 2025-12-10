@@ -19,25 +19,54 @@ class Debate:
         self.referee = Referee()
         self.scores = {a.name: 0 for a in self.agents}
 
-    def run(self):
-        console.print(Panel(f"[bold yellow]DEBATE: {self.topic}[/]", style="bold blue"))
+    async def run(self):
+    await init_db()
+    console.print(Panel(f"[bold red]EVOLUTIONARY DEBATE: {self.topic}[/]"))
 
-        for round_num in range(1, self.config.num_rounds + 1):
-            responses = []
-            for agent in self.agents:
-                reply = agent.respond(self.topic, self.debate_id, round_num)
-                responses.append({"agent": agent.name, "text": reply})
+    active_agents = self.agents.copy()
 
-            judgment = self.referee.evaluate_round(self.topic, responses)
+    for round_num in range(1, self.config.num_rounds + 1):
+        console.print(f"\n[bold]Round {round_num} | Active: {len(active_agents)} agents[/]")
 
-            # Update scores
-            for name, data in judgment.get("scores", {}).items():
-                if name in self.scores:
-                    self.scores[name] += data["total"]
+        # Parallel response from ACTIVE agents only
+        tasks = [a.respond(self.topic, self.debate_id, round_num) for a in active_agents]
+        responses = await asyncio.gather(*tasks)
 
-            show_round(round_num, responses, judgment)
+        round_responses = [{"agent": a.name, "text": r} for a, r in zip(active_agents, responses)]
 
-        # Final
-        winner = max(self.scores.items(), key=lambda x: x[1])
-        console.print(Panel(self.referee.final_verdict(self.scores, self.topic),
-                            title="FINAL VERDICT", border_style="bright_white"))
+        # Referee judges
+        judgment = await self.referee.evaluate_round(self.topic, round_responses)
+
+        # Save every response
+        round_scores = {}
+        for resp, agent in zip(round_responses, active_agents):
+            name = resp["agent"]
+            score_data = judgment["scores"].get(name, {})
+            round_scores[name] = score_data.get("total", 0)
+
+            await save_turn(
+                debate_id=self.debate_id,
+                round_num=round_num,
+                agent_name=name,
+                personality=agent.personality,
+                prompt="...",  # you can hash or truncate
+                response=resp["text"],
+                scores=score_data,
+                is_winner=(judgment.get("winner") == name)
+            )
+
+        # EVOLUTION STEP
+        await evolve_agents(active_agents, round_scores)
+
+        # Remove eliminated agents from next round
+        active_agents = [a for a in active_agents if not getattr(a, 'eliminated', False)]
+
+        if len(active_agents) <= 1:
+            console.print("[bold red]Only one remains![/]")
+            break
+
+        show_round(round_num, round_responses, judgment)
+
+    # Final survivor
+    survivor = max(self.scores.items(), key=lambda x: x[1])[0]
+    console.print(Panel(f"[bold gold]ULTIMATE SURVIVOR: {survivor}[/]", title="EVOLUTION COMPLETE"))
