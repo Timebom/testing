@@ -55,6 +55,32 @@ class Debate:
                 is_winner=(judgment.get("winner") == name)
             )
 
+        # Inside Debate.run(), after judgment:
+
+# === REFLECTIVE EVOLUTION PHASE ===
+console.print("\n[bold magenta]REFLECTIVE IMPROVEMENT PHASE — All agents evolve[/]")
+
+reflection_tasks = []
+for agent, original_text in zip(self.agents, responses_text_list):
+    task = reflective_improvement(
+        agent=agent,
+        topic=self.topic,
+        original_response=original_text,
+        winning_response=winning_response_text,
+        winner_name=judgment["winner"],
+        winner_reason=judgment["winner_reason"],
+        debate_id=self.debate_id,
+        round_num=round_num
+    )
+    reflection_tasks.append(task)
+
+# All agents improve in parallel
+improved_versions = await asyncio.gather(*reflection_tasks)
+
+# Show one example
+console.print(f"[dim]{judgment['winner']} was already strong, but others just got smarter.[/]")
+console.print(f"[italic]Example evolution — {self.agents[0].name} v2:[/] {improved_versions[0][:120]}...")
+
         # EVOLUTION STEP
         await evolve_agents(active_agents, round_scores)
 
