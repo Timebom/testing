@@ -74,3 +74,17 @@ async def get_best_response(agent_name: str, topic: str) -> Optional[str]:
         """, (agent_name, f"%{topic[:50]}%"))
         row = await cursor.fetchone()
         return row[0] if row else None
+
+    async def get_best_reflective_response(agent_name: str, topic: str) -> Optional[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            SELECT response FROM debate_history
+            WHERE agent_name = ?
+              AND prompt LIKE '%REFLECTIVE IMPROVEMENT%'
+              AND total_score >= 35
+              AND response LIKE ?
+            ORDER BY total_score DESC, timestamp DESC
+            LIMIT 1
+        """, (agent_name, f"%{topic[:60]}%"))
+        row = await cursor.fetchone()
+        return row[0] if row else None
