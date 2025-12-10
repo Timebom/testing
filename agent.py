@@ -10,28 +10,34 @@ class Agent:
         self.llm = AsyncGeminiClient()
 
     async def respond(self, topic: str, debate_id: str, round_num: int) -> str:
-        if self.eliminated:
-            return "... (eliminated this debate)"
+    # 1. Try to find a past reflective/improved response on similar topic
+    past_gold = await get_best_reflective_response(self.name, topic)
+    
+    inspiration = ""
+    if past_gold:
+        inspiration = f"""
+You once reflected and created this superior answer on a similar topic:
+"{past_gold}"
 
-        # Try to recall a winning response
-        past_winner = await get_best_response(self.name, topic)
-        recall = f"Recall your past winning argument: {past_winner}\n" if past_winner else ""
+Use that wisdom. Build on it. Go further.
+"""
 
-        context = SharedMemory().get_context(debate_id)
-        prompt = f"""
-{recall}
-You are {self.name}, {self.personality}.
-You have won {await get_agent_stats(self.name)}['wins']} times before.
-Be more persuasive than ever.
+    context = SharedMemory().get_context(debate_id)
 
+    prompt = f"""
+{inspiration}
+You are {self.name}, {self.personality} — continuously improving.
+
+You have reflected and learned from past defeats and victories.
 Topic: {topic}
 Round: {round_num}
 
-Recent:
-{context or "Start strong."}
+Recent turns:
+{context or "Be the first to set the tone."}
 
-Respond in 2–4 powerful, evolved sentences.
+Answer in 2–4 exceptionally strong sentences.
+This is your chance to show growth.
 """
 
-        response = await self.llm.generate(prompt, temperature=self.temperature_boost)
-        return response
+    response = await self.llm.generate(prompt, temperature=0.7 + (round_num * 0.1))
+    return response
